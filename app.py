@@ -8,13 +8,19 @@ def main():
 
     st.title('Caishenx')
 
-    stock = st.radio('Stock', ['ITUB4.SA'])
+    stock = st.radio('Stock', ['ITUB4.SA', 'PETR4.SA'])
 
-    stok_data = get_data_from_yf(stock)
+    stocks = st.multiselect('Stoks', ['ITUB4.SA', 'PETR4.SA'], default='ITUB4.SA')
+
+    stok_data = get_data_from_yf(stocks)
     stock_price = stok_data.history(start = '2016-01-01', end = period_now)
 
+
     st.dataframe(stock_price)
-    st.line_chart(stock_price[['High', 'Low', 'Close']])
+    st.write(stock_price.columns)
+    st.line_chart(stock_price.loc[:, [('Close', 'ITUB4.SA')]])
+
+
 
 
 if __name__ == '__main__':
