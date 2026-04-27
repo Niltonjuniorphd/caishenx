@@ -6,7 +6,8 @@ a time-series plot per sector with all stocks in that sector overlay-plotted.
 
 import streamlit as st
 import pandas as pd
-import plotly.express as px
+import matplotlib.pyplot as plt
+import seaborn as sns
 from datetime import date, timedelta
 from utils.functions import fetch_stock_data, prepare_chart_data
 from utils.stock_mappings import STOCK_NAMES, SECTOR_GROUPS
@@ -102,18 +103,29 @@ for idx, (sector_name, tickers) in enumerate(SECTOR_GROUPS.items()):
     # Friendly names
     plot_df["Ticker"] = plot_df["Ticker"].map(lambda x: STOCK_NAMES.get(x, x))
 
-    # Use rotating colors; Plotly will assign additional colors automatically
-    # if there are more tickers than palette entries
-    fig = px.line(
-        plot_df,
-        x="Date",
-        y="Close",
-        color="Ticker",
-        title=f"{sector_name} — Price History",
-        height=450,
-        color_discrete_sequence=sector_palette[pci:] + sector_palette[:pci],
-    )
-    st.plotly_chart(fig, width='stretch')
+    # Use rotating colors across the tickers in this sector
+    fig, ax = plt.subplots(figsize=(10, 4))
+    sns.set_style("darkgrid")
+
+    for i, (ticker, group) in enumerate(plot_df.groupby("Ticker")):
+        color_idx = (pci + i) % palette_len
+        ax.plot(
+            group["Date"],
+            group["Close"],
+            label=ticker,
+            color=sector_palette[color_idx],
+            linewidth=2,
+        )
+
+    ax.set_title(f"{sector_name} — Price History", fontsize=14, pad=10)
+    ax.set_xlabel("Date", fontsize=11)
+    ax.set_ylabel("Close Price (BRL)", fontsize=11)
+    ax.legend(loc="best", fontsize=9, framealpha=0.9)
+    ax.grid(True, alpha=0.3)
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    st.pyplot(fig)
+    plt.close(fig)
 
     pci = (pci + 1) % palette_len
 
