@@ -78,8 +78,9 @@ def main():
     )
     st.markdown("---")
 
-    # Hot color palette for right chart (red, orange, yellow, etc.)
-    hot_colors = ["#FF0000", "#FF4500", "#FFA500", "#FFD700", "#FF1493", "#FF6347"]
+    # High-contrast palette for clear line differentiation
+    # Using Plotly's qualitative colors: blue, red, green, purple, orange, cyan
+    hot_colors = ["#636EFA", "#EF553B", "#00CC96", "#AB63FA", "#FFA15A", "#19D3F3"]
 
     # ── Fetch once ──
     fetch_all = [left_ticker] + right_tickers
