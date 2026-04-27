@@ -37,37 +37,44 @@ def prepare_chart_data(df, selected_stocks):
     - Keep only Close columns
     - Filter only selected stocks
     - Normalize index to naive DatetimeIndex
+
+    IMPORTANT: Avoids duplicate column names by using exact ticker-prefix
+    matching (not substring), so PETR4.SA and PETR3.SA are distinguished.
     """
     original_is_multiindex = isinstance(df.columns, pd.MultiIndex)
-    df = flatten_columns(df)
 
-    # Single ticker case: simple columns (Open, High, Close...)
-    if len(selected_stocks) == 1 and not original_is_multiindex:
-        if "Close" not in df.columns:
+    if original_is_multiindex:
+        # MultiIndex: (ticker, field). Build a clean single-ticker Close series dict.
+        close_series = {}
+        for ticker in selected_stocks:
+            try:
+                col_tuple = (ticker, "Close")
+                if col_tuple in df.columns:
+                    close_series[ticker] = df[col_tuple].dropna()
+            except Exception:
+                pass
+        if not close_series:
             return pd.DataFrame()
-        chart_df = df[["Close"]].copy()
-        chart_df.columns = [selected_stocks[0]]
-    # Multiple tickers: search for Close columns by ticker
+        chart_df = pd.DataFrame(close_series)
     else:
-        close_columns = []
-        for col in df.columns:
-            if "close" in col.lower():
-                for stock in selected_stocks:
-                    if stock.lower() in col.lower():
-                        close_columns.append(col)
-                        break
-        if not close_columns:
-            return pd.DataFrame()
-        chart_df = df[close_columns].copy()
-        rename_map = {}
-        for col in chart_df.columns:
-            for stock in selected_stocks:
-                if stock.lower() in col.lower():
-                    rename_map[col] = stock
-                    break
-        chart_df = chart_df.rename(columns=rename_map)
-        available_cols = [s for s in selected_stocks if s in chart_df.columns]
-        chart_df = chart_df.reindex(columns=available_cols)
+        # Already flattened (single-level columns from flatten_columns).
+        # Column names are exactly: "{ticker}_{field}" e.g. "PETR4.SA_Close"
+        if len(selected_stocks) == 1:
+            ticker = selected_stocks[0]
+            target = f"{ticker}_Close"
+            if target not in df.columns:
+                return pd.DataFrame()
+            chart_df = df[[target]].copy()
+            chart_df.columns = [ticker]
+        else:
+            series_dict = {}
+            for ticker in selected_stocks:
+                target = f"{ticker}_Close"
+                if target in df.columns:
+                    series_dict[ticker] = df[target].dropna()
+            if not series_dict:
+                return pd.DataFrame()
+            chart_df = pd.DataFrame(series_dict)
 
     # Normalize index for Streamlit compatibility
     idx = chart_df.index
