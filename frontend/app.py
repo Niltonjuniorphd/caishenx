@@ -1,64 +1,13 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from utils.functions import fetch_stock_data, flatten_columns, prepare_chart_data
-from utils.stock_mappings import STOCK_NAMES
+from backend.data import fetch_stock_data
+from backend.chart_utils import prepare_chart_data, transform_for_plotting, compute_latest_stats
+from frontend.charts import render_chart
+from backend.mappings import STOCK_NAMES
+from backend.constants import DEFAULT_LEFT_TICKER, DEFAULT_RIGHT_TICKERS, DEFAULT_START_DATE, HOT_COLORS, COLUMN_RATIO
 
 period_now = pd.Period.now(freq="D").strftime("%Y-%m-%d")
-
-
-def render_chart(stock_price, tickers, title, colors=None):
-    """Render a line chart for the given tickers. Returns True if rendered.
-    
-    Args:
-        colors: Optional list of colors to use for lines (e.g., hot colors like red, orange, yellow)
-    """
-    df = prepare_chart_data(stock_price, tickers)
-    if not isinstance(df, pd.DataFrame):
-        try:
-            df = pd.DataFrame(df)
-        except Exception:
-            df = pd.DataFrame()
-    if df.empty:
-        st.warning(f"No data available for {', '.join(tickers)}")
-        return False
-    df = df.apply(pd.to_numeric, errors="coerce").dropna(how="all")
-    if df.empty:
-        st.warning(f"No valid numeric data for {', '.join(tickers)}")
-        return False
-    plot_df = df.reset_index().rename(
-        columns={df.index.name or df.index.names[0] or 0: "Date"}
-    )
-    plot_df = plot_df.melt(id_vars="Date", var_name="Ticker", value_name="Close").dropna(
-        subset=["Close"]
-    )
-    
-    # Replace ticker codes with friendly names for legend display
-    plot_df["Ticker"] = plot_df["Ticker"].map(lambda x: STOCK_NAMES.get(x, x))
-    
-    # Use Plotly for custom colors if provided
-    if colors:
-        fig = px.line(
-            plot_df, 
-            x="Date", 
-            y="Close", 
-            color="Ticker",
-            title=title,
-            height=400,
-            color_discrete_sequence=colors
-        )
-    else:
-        fig = px.line(
-            plot_df, 
-            x="Date", 
-            y="Close", 
-            color="Ticker",
-            title=title,
-            height=400
-        )
-    
-    st.plotly_chart(fig, width='stretch')
-    return True
 
 
 def main():
@@ -68,24 +17,23 @@ def main():
     # ── Ticker selection ──
     st.subheader("Select Tickers")
     all_options = list(STOCK_NAMES.keys())
-    left_ticker = "^BVSP"
+    left_ticker = DEFAULT_LEFT_TICKER
     right_tickers = st.multiselect(
         "Other stocks to plot (right chart)",
         options=[opt for opt in all_options if opt != left_ticker],
-        default=["PETR4.SA"],
+        default=DEFAULT_RIGHT_TICKERS,
         format_func=lambda x: STOCK_NAMES.get(x, x),
         help="Choose one or more stocks to compare with Ibovespa.",
     )
     st.markdown("---")
 
     # High-contrast palette for clear line differentiation
-    # Using Plotly's qualitative colors: blue, red, green, purple, orange, cyan
-    hot_colors = ["#636EFA", "#EF553B", "#00CC96", "#AB63FA", "#FFA15A", "#19D3F3"]
+    hot_colors = HOT_COLORS
 
     # ── Fetch once ──
     fetch_all = [left_ticker] + right_tickers
     try:
-        stock_price = fetch_stock_data(tuple(fetch_all), "2016-01-01", period_now)
+        stock_price = fetch_stock_data(tuple(fetch_all), DEFAULT_START_DATE, period_now)
         if not isinstance(stock_price, pd.DataFrame):
             raise TypeError("Fetched data is not a DataFrame")
         if stock_price.empty:
@@ -103,7 +51,7 @@ def main():
     has_right = bool(right_tickers)
 
     if has_right:
-        col1, col2 = st.columns([1, 1], gap="medium")
+        col1, col2 = st.columns(COLUMN_RATIO, gap="medium")
     else:
         col1 = st.container()
         col2 = None
@@ -125,22 +73,15 @@ def main():
     if has_right:
         st.markdown("---")
         st.subheader("Latest Close Prices")
-        stats = prepare_chart_data(stock_price, fetch_all)
-        stats = stats.apply(pd.to_numeric, errors="coerce").dropna(how="all")
-        if not stats.empty:
-            last = stats.iloc[-1]
-            n_cols = min(4, len(last))
+        stats_series = compute_latest_stats(prepare_chart_data(stock_price, fetch_all), fetch_all)
+        if not stats_series.empty:
+            n_cols = min(4, len(stats_series))
             cols = st.columns(n_cols)
-            i = 0
-            for ticker, price in last.items():
+            for i, (ticker, price) in enumerate(stats_series.items()):
                 if i < n_cols:
                     label = STOCK_NAMES.get(ticker, ticker)
                     with cols[i]:
-                        st.metric(
-                            label=label,
-                            value=f"{price:,.2f}",
-                        )
-                        i += 1
+                        st.metric(label=label, value=f"{price:,.2f}")
 
     # ── Single-stock detail shown below charts on mobile ──
     if has_right and len(right_tickers) == 1:

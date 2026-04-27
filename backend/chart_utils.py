@@ -1,15 +1,12 @@
-"""Utility functions for stock data fetching and chart preparation."""
+"""
+Backend chart data transformation utilities.
 
-import streamlit as st
+Pure functions for preparing and reshaping stock data for visualization.
+No Streamlit or UI dependencies.
+"""
+
 import pandas as pd
-from utils.load_data import get_data_from_yf
-
-
-@st.cache_data(ttl=3600)
-def fetch_stock_data(stocks_tuple, start, end):
-    """Fetch historical stock data with caching."""
-    tickers = get_data_from_yf(list(stocks_tuple))
-    return tickers.history(start=start, end=end, group_by="ticker")
+from backend.mappings import STOCK_NAMES
 
 
 def flatten_columns(df):
@@ -86,3 +83,55 @@ def prepare_chart_data(df, selected_stocks):
         chart_df.index = idx.tz_localize(None)
 
     return chart_df
+
+
+def transform_for_plotting(df, tickers):
+    """Transform prepared chart data into long-format DataFrame ready for plotting.
+
+    Args:
+        df: DataFrame from prepare_chart_data() with ticker columns and DatetimeIndex
+        tickers: List of ticker symbols (for validation/fallback)
+
+    Returns:
+        Long-format DataFrame with columns: Date, Ticker (friendly name), Close
+    """
+    if df.empty:
+        return pd.DataFrame(columns=["Date", "Ticker", "Close"])
+
+    # Ensure numeric and drop all-NA rows
+    df = df.apply(pd.to_numeric, errors="coerce").dropna(how="all")
+    if df.empty:
+        return pd.DataFrame(columns=["Date", "Ticker", "Close"])
+
+    # Reset index → rename → melt → dropna Close
+    plot_df = df.reset_index().rename(
+        columns={df.index.name or df.index.names[0] or 0: "Date"}
+    )
+    plot_df = plot_df.melt(
+        id_vars="Date", var_name="Ticker", value_name="Close"
+    ).dropna(subset=["Close"])
+
+    # Map ticker codes → friendly names
+    plot_df["Ticker"] = plot_df["Ticker"].map(lambda x: STOCK_NAMES.get(x, x))
+    return plot_df
+
+
+def compute_latest_stats(df, tickers):
+    """Extract the most recent close price for each ticker from chart-ready data.
+
+    Args:
+        df: DataFrame from prepare_chart_data() (ticker columns, DatetimeIndex)
+        tickers: List of ticker symbols
+
+    Returns:
+        pandas Series indexed by ticker with latest close prices, or empty Series
+    """
+    if df.empty:
+        return pd.Series(dtype=float)
+    df = df.apply(pd.to_numeric, errors="coerce").dropna(how="all")
+    if df.empty:
+        return pd.Series(dtype=float)
+    last = df.iloc[-1]
+    # Keep only tickers that actually exist in the row
+    valid = {t: last[t] for t in tickers if t in last.index and pd.notna(last[t])}
+    return pd.Series(valid)

@@ -9,8 +9,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from datetime import date, timedelta
-from utils.functions import fetch_stock_data, prepare_chart_data
-from utils.stock_mappings import STOCK_NAMES, SECTOR_GROUPS
+from backend.data import fetch_stock_data
+from backend.chart_utils import prepare_chart_data, transform_for_plotting
+from backend.mappings import STOCK_NAMES, SECTOR_GROUPS
+from backend.constants import SECTOR_COLORS
 
 st.title("Sectors Overview")
 
@@ -63,17 +65,11 @@ except Exception as e:
 
 st.success(f"Loaded {len(stock_price)} trading days of data.")
 
-# ── Color palette ──
-sector_palette = [
-    "#636EFA", "#EF553B", "#00CC96", "#AB63FA", "#FFA15A",
-    "#19D3F3", "#FF6692", "#B6E880", "#FF97FF", "#FECB52"
-]
-
 st.markdown("Each chart shows all tickers in that sector overlayed on the same time-series plot.")
 st.markdown("---")
 
 # ── Render charts ──
-palette_len = len(sector_palette)
+palette_len = len(SECTOR_COLORS)
 pci = 0  # palette color index cycling
 
 for idx, (sector_name, tickers) in enumerate(SECTOR_GROUPS.items()):
@@ -88,20 +84,11 @@ for idx, (sector_name, tickers) in enumerate(SECTOR_GROUPS.items()):
         st.warning(f"No data available for {sector_name}.")
         continue
 
-    df = df.apply(pd.to_numeric, errors="coerce").dropna(how="all")
-    if df.empty:
+    # Transform to long format (shared logic)
+    plot_df = transform_for_plotting(df, tickers)
+    if plot_df.empty:
         st.warning(f"No numeric data for {sector_name}.")
         continue
-
-    plot_df = df.reset_index().rename(
-        columns={df.index.name or df.index.names[0] or 0: "Date"}
-    )
-    plot_df = plot_df.melt(
-        id_vars="Date", var_name="Ticker", value_name="Close"
-    ).dropna(subset=["Close"])
-
-    # Friendly names
-    plot_df["Ticker"] = plot_df["Ticker"].map(lambda x: STOCK_NAMES.get(x, x))
 
     # Use rotating colors across the tickers in this sector
     fig, ax = plt.subplots(figsize=(10, 4))
@@ -113,7 +100,7 @@ for idx, (sector_name, tickers) in enumerate(SECTOR_GROUPS.items()):
             group["Date"],
             group["Close"],
             label=ticker,
-            color=sector_palette[color_idx],
+            color=SECTOR_COLORS[color_idx],
             linewidth=2,
         )
 

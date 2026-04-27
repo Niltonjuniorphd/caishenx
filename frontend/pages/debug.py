@@ -2,7 +2,7 @@
 
 import streamlit as st
 import pandas as pd
-from utils.functions import flatten_columns, prepare_chart_data
+from backend.chart_utils import flatten_columns, prepare_chart_data, transform_for_plotting
 
 st.title("Debug Inspector")
 
@@ -34,12 +34,6 @@ st.write("Chart data index:", chart_data.index)
 # Show the final plot-ready dataframe as well
 if not chart_data.empty:
     st.header("Plot-Ready DataFrame (long format)")
-    plot_df = chart_data.reset_index().rename(
-        columns={chart_data.index.name or chart_data.index.names[0] or 0: "Date"}
-    )
-    plot_df = plot_df.melt(
-        id_vars="Date", var_name="Ticker", value_name="Close"
-    )
-    plot_df = plot_df.dropna(subset=["Close"])
+    plot_df = transform_for_plotting(chart_data, stocks)
     st.dataframe(plot_df.head())
     st.write("Plot DF shape:", plot_df.shape)
