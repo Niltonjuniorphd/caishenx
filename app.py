@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from utils.functions import fetch_stock_data, flatten_columns, prepare_chart_data
-from stock_mappings import STOCK_NAMES
+from utils.stock_mappings import STOCK_NAMES
 
 period_now = pd.Period.now(freq="D").strftime("%Y-%m-%d")
 
